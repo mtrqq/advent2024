@@ -3,6 +3,8 @@ package golang
 const (
 	EndOfLine = "\n"
 	Space     = " "
+	Pipe      = "|"
+	Comma     = ","
 	Decimal   = 10
 	BitSize64 = 64
 )
