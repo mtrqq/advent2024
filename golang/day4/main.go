@@ -13,65 +13,32 @@ import (
 
 var inputFile = flag.String("input", "input.txt", "Path to input file")
 
-const (
-	targetWord = "XMAS"
+var (
+	targetWord         = []byte("XMAS")
+	diagonalTargetWord = []byte("MAS")
 )
 
-type byteRoutes map[byte][]gridPoint
+type point struct {
+	row    int
+	column int
+}
 
 type byteGrid struct {
 	array   [][]byte
 	rows    int
 	columns int
-
-	routeCache map[gridPoint]byteRoutes
 }
 
 func newGrid(array [][]byte, rows int, columns int) byteGrid {
 	return byteGrid{
-		array:      array,
-		rows:       rows,
-		columns:    columns,
-		routeCache: make(map[gridPoint]byteRoutes),
+		array:   array,
+		rows:    rows,
+		columns: columns,
 	}
 }
 
 func (g byteGrid) get(row int, column int) byte {
 	return g.array[row][column]
-}
-
-func (g byteGrid) routesFrom(row, column int) byteRoutes {
-	from := gridPoint{row: row, column: column}
-	if routes, exists := g.routeCache[from]; exists {
-		return routes
-	}
-
-	routes := byteRoutes{}
-	for i := -1; i <= 1; i++ {
-		for j := -1; j <= 1; j++ {
-			adjRow, adjCol := from.row+i, from.column+j
-			if adjRow >= g.rows || adjCol >= g.columns || adjRow < 0 || adjCol < 0 {
-				continue
-			}
-
-			adjPoint := gridPoint{row: adjRow, column: adjCol}
-			cellByte := g.array[adjRow][adjCol]
-			points := append(routes[cellByte], adjPoint)
-			routes[cellByte] = points
-		}
-	}
-
-	g.routeCache[from] = routes
-	return routes
-}
-
-func (g byteGrid) routesFromTo(row int, column int, b byte) []gridPoint {
-	return g.routesFrom(row, column)[b]
-}
-
-type gridPoint struct {
-	row    int
-	column int
 }
 
 func readByteGrid(filePath string) (byteGrid, error) {
@@ -104,47 +71,130 @@ func readByteGrid(filePath string) (byteGrid, error) {
 	return newGrid(array, rows, columns), nil
 }
 
-type countEntry struct {
-	row    int
-	column int
-	offset int
+func matchesLineInDirection(grid byteGrid, fromRow, fromColumn, directionRow, directionColumn int, targetLine []byte) bool {
+	line := make([]byte, len(targetLine))
+	row, column := fromRow, fromColumn
+	for i := 0; i < len(targetLine); i++ {
+		if row >= grid.rows || column >= grid.columns || row < 0 || column < 0 {
+			return false
+		}
+
+		line[i] = grid.get(row, column)
+		row += directionRow
+		column += directionColumn
+	}
+
+	return bytes.Equal(line, targetLine)
 }
 
 func countWordsPart1(grid byteGrid) int {
-	stack := []countEntry{}
+	count := 0
+	for row := 0; row < grid.rows; row++ {
+		for column := 0; column < grid.columns; column++ {
+			if targetWord[0] != grid.get(row, column) {
+				continue
+			}
 
-	for i := 0; i < grid.rows; i++ {
-		for j := 0; j < grid.columns; j++ {
-			stack = append(stack, countEntry{
-				row:    i,
-				column: j,
-				offset: 0,
-			})
+			for dx := -1; dx <= 1; dx++ {
+				for dy := -1; dy <= 1; dy++ {
+					if matchesLineInDirection(grid, row, column, dx, dy, []byte(targetWord)) {
+						count++
+					}
+				}
+			}
+		}
+	}
+
+	return count
+}
+
+func contains[K comparable, V any](mapping map[K]V, key K) bool {
+	if _, exists := mapping[key]; exists {
+		return true
+	}
+
+	return false
+}
+
+func findXPoints(grid byteGrid, row int, column int) []point {
+	if grid.get(row, column) != diagonalTargetWord[0] {
+		return []point{}
+	}
+
+	xpoints := []point{}
+
+	if matchesLineInDirection(grid, row, column, 1, 1, diagonalTargetWord) {
+		if matchesLineInDirection(grid, row+2, column, -1, 1, diagonalTargetWord) ||
+			matchesLineInDirection(grid, row, column+2, 1, -1, diagonalTargetWord) {
+			xpoints = append(xpoints,
+				[]point{
+					{row: row, column: column},
+					{row: row + 1, column: column + 1},
+					{row: row + 2, column: column + 2},
+					{row: row + 2, column: column},
+					{row: row, column: column + 2},
+				}...,
+			)
+		}
+	}
+
+	if matchesLineInDirection(grid, row, column, -1, -1, diagonalTargetWord) {
+		if matchesLineInDirection(grid, row-2, column, 1, -1, diagonalTargetWord) ||
+			matchesLineInDirection(grid, row, column-2, -1, 1, diagonalTargetWord) {
+			xpoints = append(xpoints,
+				[]point{
+					{row: row, column: column},
+					{row: row - 1, column: column - 1},
+					{row: row - 2, column: column - 2},
+					{row: row - 2, column: column},
+					{row: row, column: column - 2},
+				}...,
+			)
+		}
+	}
+
+	return xpoints
+}
+
+func collectXBytes(grid byteGrid, row, column int) []byte {
+	if row-1 < 0 || column-1 < 0 {
+		return nil
+	}
+
+	if row+1 >= grid.rows || column+1 >= grid.columns {
+		return nil
+	}
+
+	return []byte{
+		grid.get(row-1, column-1),
+		grid.get(row-1, column+1),
+		grid.get(row, column),
+		grid.get(row+1, column-1),
+		grid.get(row-1, column+1),
+	}
+}
+
+func countWordsPart2(grid byteGrid) int {
+	xs := map[point]struct{}{}
+	for row := 0; row < grid.rows; row++ {
+		for column := 0; column < grid.columns; column++ {
+			if diagonalTargetWord[0] != grid.get(row, column) {
+				continue
+			}
+
+			for _, xpoint := range findXPoints(grid, row, column) {
+				xs[xpoint] = struct{}{}
+			}
 		}
 	}
 
 	count := 0
-	for len(stack) > 0 {
-		entry := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-
-		if targetWord[entry.offset] != grid.get(entry.row, entry.column) {
-			continue
-		}
-
-		if entry.offset >= len(targetWord)-1 {
+	for xpoint := range xs {
+		if contains(xs, point{row: xpoint.row + 1, column: xpoint.column + 1}) &&
+			contains(xs, point{row: xpoint.row - 1, column: xpoint.column - 1}) &&
+			contains(xs, point{row: xpoint.row - 1, column: xpoint.column + 1}) &&
+			contains(xs, point{row: xpoint.row + 1, column: xpoint.column - 1}) {
 			count++
-			continue
-		}
-
-		nextLetter := targetWord[entry.offset+1]
-		nextPoints := grid.routesFromTo(entry.row, entry.column, nextLetter)
-		for _, point := range nextPoints {
-			stack = append(stack, countEntry{
-				row:    point.row,
-				column: point.column,
-				offset: entry.offset + 1,
-			})
 		}
 	}
 
@@ -159,6 +209,9 @@ func main() {
 		log.Fatalf("Failed to read instructions file: %v", err)
 	}
 
-	count := countWordsPart1(grid)
-	log.Printf("[XmasWord#Part1] Count: %d", count)
+	countPart1 := countWordsPart1(grid)
+	log.Printf("[XmasWord#Part1] Count: %d", countPart1)
+
+	countPart2 := countWordsPart2(grid)
+	log.Printf("[XmasWord#Part2] Count: %d", countPart2)
 }
