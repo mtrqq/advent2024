@@ -14,14 +14,14 @@ import (
 var inputFile = flag.String("input", "input.txt", "Path to input file")
 
 var (
-	targetWord         = []byte("XMAS")
-	diagonalTargetWord = []byte("MAS")
+	targetWord          = []byte("XMAS")
+	validDiagonalShapes = map[string]struct{}{
+		"SSAMM": {},
+		"SMASM": {},
+		"MMASS": {},
+		"MSAMS": {},
+	}
 )
-
-type point struct {
-	row    int
-	column int
-}
 
 type byteGrid struct {
 	array   [][]byte
@@ -116,47 +116,7 @@ func contains[K comparable, V any](mapping map[K]V, key K) bool {
 	return false
 }
 
-func findXPoints(grid byteGrid, row int, column int) []point {
-	if grid.get(row, column) != diagonalTargetWord[0] {
-		return []point{}
-	}
-
-	xpoints := []point{}
-
-	if matchesLineInDirection(grid, row, column, 1, 1, diagonalTargetWord) {
-		if matchesLineInDirection(grid, row+2, column, -1, 1, diagonalTargetWord) ||
-			matchesLineInDirection(grid, row, column+2, 1, -1, diagonalTargetWord) {
-			xpoints = append(xpoints,
-				[]point{
-					{row: row, column: column},
-					{row: row + 1, column: column + 1},
-					{row: row + 2, column: column + 2},
-					{row: row + 2, column: column},
-					{row: row, column: column + 2},
-				}...,
-			)
-		}
-	}
-
-	if matchesLineInDirection(grid, row, column, -1, -1, diagonalTargetWord) {
-		if matchesLineInDirection(grid, row-2, column, 1, -1, diagonalTargetWord) ||
-			matchesLineInDirection(grid, row, column-2, -1, 1, diagonalTargetWord) {
-			xpoints = append(xpoints,
-				[]point{
-					{row: row, column: column},
-					{row: row - 1, column: column - 1},
-					{row: row - 2, column: column - 2},
-					{row: row - 2, column: column},
-					{row: row, column: column - 2},
-				}...,
-			)
-		}
-	}
-
-	return xpoints
-}
-
-func collectXBytes(grid byteGrid, row, column int) []byte {
+func collectXShape(grid byteGrid, row, column int) []byte {
 	if row-1 < 0 || column-1 < 0 {
 		return nil
 	}
@@ -170,31 +130,23 @@ func collectXBytes(grid byteGrid, row, column int) []byte {
 		grid.get(row-1, column+1),
 		grid.get(row, column),
 		grid.get(row+1, column-1),
-		grid.get(row-1, column+1),
+		grid.get(row+1, column+1),
 	}
 }
 
 func countWordsPart2(grid byteGrid) int {
-	xs := map[point]struct{}{}
+	count := 0
+
 	for row := 0; row < grid.rows; row++ {
 		for column := 0; column < grid.columns; column++ {
-			if diagonalTargetWord[0] != grid.get(row, column) {
+			if grid.get(row, column) != 'A' {
 				continue
 			}
 
-			for _, xpoint := range findXPoints(grid, row, column) {
-				xs[xpoint] = struct{}{}
+			shape := string(collectXShape(grid, row, column))
+			if contains(validDiagonalShapes, shape) {
+				count++
 			}
-		}
-	}
-
-	count := 0
-	for xpoint := range xs {
-		if contains(xs, point{row: xpoint.row + 1, column: xpoint.column + 1}) &&
-			contains(xs, point{row: xpoint.row - 1, column: xpoint.column - 1}) &&
-			contains(xs, point{row: xpoint.row - 1, column: xpoint.column + 1}) &&
-			contains(xs, point{row: xpoint.row + 1, column: xpoint.column - 1}) {
-			count++
 		}
 	}
 
